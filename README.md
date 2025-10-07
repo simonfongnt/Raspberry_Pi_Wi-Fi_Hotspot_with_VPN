@@ -88,6 +88,10 @@ dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
 domain=wlan     # Local wireless DNS domain
 address=/gw.wlan/192.168.4.1
                 # Alias for this router
+# Optional, improves Android compatibility
+dhcp-option=3,192.168.4.1       # Gateway
+dhcp-option=6,1.1.1.1,8.8.8.8   # DNS servers
+
 ```
   - This configures DHCP to hand out IPs in the range 192.168.4.2 to 192.168.4.20.
 6. Enable IP Forwarding and Configure NAT (for VPN or Internet Sharing)
@@ -126,6 +130,12 @@ sudo netfilter-persistent save
 Ensure Wifi Radio is not blocked on Raspberry Pi
 ```
 sudo rfkill unblock wlan
+```
+Assign static IP to wlan0
+```
+sudo ip addr flush dev wlan0
+sudo ip addr add 192.168.4.1/24 dev wlan0
+sudo ip link set wlan0 up
 ```
 7. Enable and Start Services
 ```
