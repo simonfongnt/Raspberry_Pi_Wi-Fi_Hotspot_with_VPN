@@ -82,8 +82,12 @@ sudo nano /etc/dnsmasq.conf
 ```
 Add the following content:
 ```
-interface=wlan0      # Use interface wlan0
+interface=wlan0 # Listening interface
 dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+                # Pool of IP addresses served via DHCP
+domain=wlan     # Local wireless DNS domain
+address=/gw.wlan/192.168.4.1
+                # Alias for this router
 ```
   - This configures DHCP to hand out IPs in the range 192.168.4.2 to 192.168.4.20.
 6. Enable IP Forwarding and Configure NAT (for VPN or Internet Sharing)
@@ -103,6 +107,8 @@ net.ipv4.ip_forward=1
 ```
 Set up NAT with iptables (example):
 ```
+sudo iptables -t nat -F POSTROUTING # Flush POSTROUTING rules
+
 sudo iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE
 sudo iptables -A FORWARD -i tun0 -o wlan0 -m state --state RELATED,ESTABLISHED -j ACCEPT
 sudo iptables -A FORWARD -i wlan0 -o tun0 -j ACCEPT
