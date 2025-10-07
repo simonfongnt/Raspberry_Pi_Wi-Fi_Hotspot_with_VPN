@@ -20,15 +20,19 @@ X. Configure OpenVPN (Optional)
 ```
 mv xXxXx.ovpn /etc/openvpn/xXxXx.conf
 ```
-- Create an auth file /etc/openvpn/auth.txt
+- Create an auth file /etc/openvpn/client.auth
 ```
 username
 password
 ```
+- add permission setting for a bit of security
+```
+sudo chmod 600 /etc/openvpn/client.auth
+```
 - Update xXxXx.conf with `sudo vum /etc/openvpn/xXxXx.conf`
 ```
 ...
-auth-user-pass /etc/openvpn/auth.txt
+auth-user-pass /etc/openvpn/client.auth
 ...
 tls-cipher "DEFAULT:@SECLEVEL=0" <-- for older version
 ...
