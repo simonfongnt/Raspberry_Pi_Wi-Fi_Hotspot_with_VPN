@@ -114,6 +114,7 @@ Make iptables rules persistent (optional):
 Install iptables-persistent or add a script to load on boot.
 Or, save it to be loaded on boot time by
 ```
+sudo apt install iptables-persistent
 sudo netfilter-persistent save
 ```
 Ensure Wifi Radio is not blocked on Raspberry Pi
