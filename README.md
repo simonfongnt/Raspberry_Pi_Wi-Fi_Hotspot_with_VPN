@@ -131,11 +131,23 @@ Ensure Wifi Radio is not blocked on Raspberry Pi
 ```
 sudo rfkill unblock wlan
 ```
-Assign static IP to wlan0
+Assign static IP to wlan0 by Systemd, `sudo vim /etc/systemd/system/wlan0-static.service`
 ```
-sudo ip addr flush dev wlan0
-sudo ip addr add 192.168.4.1/24 dev wlan0
-sudo ip link set wlan0 up
+[Unit]
+Description=Configure static IP for wlan0
+After=network-pre.target
+Before=hostapd.service dnsmasq.service
+Wants=hostapd.service dnsmasq.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip addr flush dev wlan0
+ExecStart=/usr/sbin/ip addr add 192.168.4.1/24 dev wlan0
+ExecStart=/usr/sbin/ip link set wlan0 up
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
 ```
 7. Enable and Start Services
 ```
