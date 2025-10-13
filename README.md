@@ -1,214 +1,166 @@
 # Raspberry_Pi_Wi-Fi_Hotspot_with_VPN
 Raspberry Pi 4 Wi-Fi Hotspot with VPN
+Since Raspberry Pi OS Bookworm, the network setting is managed by NetworkManager (instead of dhcpcd). It will take control for what was done by hostapd and dnsmasq as well.
 
-1. Initial Setup
+1. Prerequisites:
 
-  - Flash Raspberry Pi OS on the Pi 4.
-  - Enable SSH for headless access by placing an empty ssh file in /boot.
-  - Connect to Pi via SSH.
-  - Private OpenVPN file (.ovpn -> .conf)
+  - Raspberry Pi 4B 4GB
+  - Private OpenVPN file (e.g., client.ovpn)
+  - Another computer
+  - SD Card and adaptor
+  - LAN between Router and RPi
 
-2. Install Required Packages
-```
-sudo apt update
-sudo apt upgrade
-sudo apt-get install openvpn iptables hostapd dnsmasq -y
-sudo systemctl stop hostapd dnsmasq
-```
-X. Configure OpenVPN (Optional)
-- Move OpenVPN file to folder
-```
-mv xXxXx.ovpn /etc/openvpn/xXxXx.conf
-```
-- Create an auth file /etc/openvpn/client.auth
-```
-username
-password
-```
-- add permission setting for a bit of security
-```
-sudo chmod 600 /etc/openvpn/client.auth
-```
-- Update xXxXx.conf with `sudo vum /etc/openvpn/xXxXx.conf`
-```
-...
-auth-user-pass /etc/openvpn/client.auth
-...
-tls-cipher "DEFAULT:@SECLEVEL=0" <-- for older version
-...
-```
-- Autostart the client at boot with `sudo vim /etc/default/openvpn`
-```
-...
-autostart="xXxXx" 
-...
-```
-3. Configure Hostapd (Wi-Fi Access Point)
-Create/edit /etc/hostapd/hostapd.conf with content (no blanket needed for ssid & passphrase):
-```
-interface=wlan0
-driver=nl80211
-ssid=YourSSID
-hw_mode=g
-channel=7
-wmm_enabled=0
-macaddr_acl=0
-auth_algs=1
-ignore_broadcast_ssid=0
-wpa=2
-wpa_passphrase=YourStrongPassword
-wpa_key_mgmt=WPA-PSK
-rsn_pairwise=CCMP
-```
-Edit /etc/default/hostapd to specify config file path:
-```
-...
-DAEMON_CONF="/etc/hostapd/hostapd.conf"
-...
-```
-4. Configure Static IP for wlan0
-Edit /etc/dhcpcd.conf and add at the bottom:
-```
-interface wlan0
-    static ip_address=192.168.4.1/24
-    nohook wpa_supplicant
-```
-  - This sets the hotspot IP to 192.168.4.1 and disables wpa_supplicant on wlan0 to avoid conflict.
-5. Configure DHCP and DNS Server (dnsmasq)
-  - Backup default config and create a new dnsmasq config:
-```
-sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
-sudo nano /etc/dnsmasq.conf
-```
-Add the following content:
-```
-interface=wlan0 # Listening interface
-dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
-                # Pool of IP addresses served via DHCP
-domain=wlan     # Local wireless DNS domain
-address=/gw.wlan/192.168.4.1
-                # Alias for this router
-# Optional, improves Android compatibility
-dhcp-option=3,192.168.4.1       # Gateway
-dhcp-option=6,1.1.1.1,8.8.8.8   # DNS servers
+2. Raspberry Pi Image Setting before flash:
+    - Raspberry Pi OS (64Bit) Trixie without desktop
+    - Advanced options:
+      - Set hostname
+      - Enable SSH
+      - Username and Password set
 
-```
-  - This configures DHCP to hand out IPs in the range 192.168.4.2 to 192.168.4.20.
-6. Enable IP Forwarding and Configure NAT (for VPN or Internet Sharing)
-Enable IPv4 forwarding:
-Edit /etc/sysctl.conf and uncomment:
-```
-net.ipv4.ip_forward=1
-```
-Apply immediately:
-```
-sudo sysctl -w net.ipv4.ip_forward=1
-```
-Enable routing to allow traffic flow (Old, `sudo vim /etc/sysctl.d/routed-ap.conf`)
-```
-# Enable IPv4 routing
-net.ipv4.ip_forward=1
-```
-Set up NAT with iptables (example):
-```
-sudo iptables -t nat -F POSTROUTING # Flush POSTROUTING rules
+3. Unblock the Wi-Fi (if message shows)
+   
+   Wi-FI of RPi might be blocked without Country setting
+   Upon Login, the prompt might shows this message:
+   ```
+   Wi-Fi is currently blocked by rfkill.
+   Use raspi-config to set the country before use.
+   ```
+   - Run `sudo raspi-config`
+   - Navigate to Localisation Options > L4 WLAN Country
+   - Select your country, e.g., GB Britain (UK)
 
-sudo iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE
-sudo iptables -A FORWARD -i tun0 -o wlan0 -m state --state RELATED,ESTABLISHED -j ACCEPT
-sudo iptables -A FORWARD -i wlan0 -o tun0 -j ACCEPT
+4. Install Required Packages   
+  ```
+  sudo apt update
+  sudo apt upgrade -y
+  sudo apt-get install vim openvpn iptables -y
+  sudo systemctl stop hostapd dnsmasq
+  ```
 
-sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-sudo sh -c "iptables-save > /etc/iptables.ipv4.nat"
-```
-Make iptables rules persistent (optional):
-Install iptables-persistent or add a script to load on boot.
-Or, save it to be loaded on boot time by
-```
-sudo apt install iptables-persistent
-sudo netfilter-persistent save
-```
-Ensure Wifi Radio is not blocked on Raspberry Pi
-```
-sudo rfkill unblock wlan
-```
-[not working]Assign static IP to wlan0 by Systemd, `sudo vim /etc/systemd/system/wlan0-static.service`
-```
-[Unit]
-Description=Configure static IP for wlan0
-After=network-pre.target
-Before=hostapd.service dnsmasq.service
-Wants=hostapd.service dnsmasq.service
+5. Configure OpenVPN (for Private VPN)
 
-[Service]
-Type=oneshot
-ExecStart=/usr/sbin/ip addr flush dev wlan0
-ExecStart=/usr/sbin/ip addr add 192.168.4.1/24 dev wlan0
-ExecStart=/usr/sbin/ip link set wlan0 up
-RemainAfterExit=yes
+  - Transfer OpenVPN file to the RPi:
+      ```
+      scp client.ovpn username@192.168.XXX.XXX:~/client.conf
+      ```
+  - Connect to the RPi via SSH
+  - Move OpenVPN file
+      ```
+      sudo mv client.conf /etc/openvpn/client.conf
+      ```
+  - Create an auth file by
 
-[Install]
-WantedBy=multi-user.target
-```
-Script to assign IP to wlan0
-```
-sudo nano /usr/local/bin/setup-wifi-hotspot.sh
-```
-```
-#!/bin/bash
+      `sudo vim /etc/openvpn/client.auth`
 
-# Flush existing IP addresses on wlan0
-sudo ip addr flush dev wlan0
+    with these 2 lines
+    
+      ```
+      username
+      password
+      ```
+  - add permission setting for a bit of security
+      ```
+      sudo chmod 600 /etc/openvpn/client.auth
+      ```
+  - Update client.conf by
+    
+      `sudo vim /etc/openvpn/client.conf`
+    
+    with
+    
+      ```
+      ...
+      auth-user-pass /etc/openvpn/client.auth
+      ...
+      tls-cipher "DEFAULT:@SECLEVEL=0" <-- for older version
+      ...
+      ```
+    
+  - Autostart the client at boot by
+    
+       `sudo vim /etc/default/openvpn`
+    
+    with
 
-# Assign static IP for hotspot
-sudo ip addr add 192.168.4.1/24 dev wlan0
+      ```
+      ...
+      autostart="client" 
+      ...
+      ```
 
-# Bring wlan0 up
-sudo ip link set wlan0 up
+  - Reboot and verify to see if tun0 is active
+    ```
+    ip addr show
+    ```
 
-# Restart hostapd and dnsmasq services
-sudo systemctl restart hostapd
-```
-```
-sudo chmod +x /usr/local/bin/setup-wifi-hotspot.sh
-```
+6. Configure Wi-Fi Hotspot
+   - Create the hotspot - NEED TO MODIFY
 
+     ```
+     sudo nmcli con add type wifi ifname wlan0 con-name hotspot autoconnect yes ssid <<<SSID>>>
+     ```
+     
+   * No quote required for SSID
+   - Configure hotspot - NEED TO MODIFY
 
-7. Enable and Start Services
-```
-sudo systemctl unmask hostapd
-sudo systemctl enable hostapd
-sudo systemctl enable dnsmasq
-sudo systemctl start hostapd
-sudo systemctl start dnsmasq
-```
-8. Verify Everything
-- Check hostapd status:
-```
-sudo systemctl status hostapd
-```
-- Check dnsmasq status:
-```
-sudo systemctl status dnsmasq
-```
-- Check IP address on wlan0:
-```
-ip addr show wlan0
-```
-Should show 192.168.4.1.
-- Connect a client device to the Wi-Fi SSID and check if it gets an IP in the DHCP range.
+     ```
+     sudo nmcli con modify hotspot 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared wifi-sec.key-mgmt wpa-psk wifi-sec.psk "<<<PASSWORD>>>"
+     ```
+     * quote REQUIRED for PASSWORD
+     * “ipv4.method shared” tells NM to:   
+     *   • assign 10.42.x.x to wlan0 automatically   
+     *   • enable internal DHCP + NAT using its built-in dnsmasq
+     
+   - Start the hotspot
+     
+     `sudo nmcli con up hotspot`
+  
+   - VPN Routing
+     
+     ```
+     sudo iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE
+     sudo iptables -A FORWARD -i tun0 -o wlan0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+     sudo iptables -A FORWARD -i wlan0 -o tun0 -j ACCEPT
+     ```
+   - Double check
+     
+     ```
+     sudo iptables -t nat -L -n -v
+     ...
+     Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
+     pkts bytes target     prot opt in  out   source      destination
+        0     0 MASQUERADE  all  --  *   tun0  0.0.0.0/0  0.0.0.0/0
 
+     sudo iptables -L FORWARD -n -v
+     Chain FORWARD (policy DROP)
+     pkts bytes target     prot opt in   out   source      destination
+        0     0 ACCEPT     all  --  tun0 wlan0  0.0.0.0/0  0.0.0.0/0  ctstate RELATED,ESTABLISHED
+        0     0 ACCEPT     all  --  wlan0 tun0  0.0.0.0/0  0.0.0.0/0
 
+     sudo iptables -t nat -L -n -v
+     sudo iptables -L FORWARD -n -v
+     pkts bytes target     prot opt in   out   source      destination
+        123  9087 MASQUERADE  all  --  *  tun0  0.0.0.0/0  0.0.0.0/0
 
-Possible Issues:
-- Fix Wi-Fi Soft Block (rfkill)
-  - Run:
-```
-sudo rfkill unblock wlan
+     ip route show
+     10.8.0.0/24 dev wlan0 proto kernel scope link src 10.8.0.1
+     ```
 
-```
-  - To make this permanent, set the Wi-Fi country:
-```
-sudo raspi-config
-```
-  - Go to Localisation Options > Wi-Fi Country and select your country.
-  - Reboot.
+7. Verificaton & Finish Up
+   - Connect a device and check IP
+   - Save the rules for persistsence if working
+    ```
+    sudo apt install iptables-persistent -y
+    sudo netfilter-persistent save
+    ```
+   - Reboot and try again
+
+- Something went wrong?
+  - Cleanup / Replace Existing iptables Reules:
+    ```
+    sudo iptables -F
+    sudo iptables -t nat -F
+    sudo iptables -X
+    ```
+  
+
