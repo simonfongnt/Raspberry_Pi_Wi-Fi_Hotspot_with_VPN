@@ -34,7 +34,6 @@ Since Raspberry Pi OS Bookworm, the network setting is managed by NetworkManager
   sudo apt update
   sudo apt upgrade -y
   sudo apt-get install vim openvpn iptables -y
-  sudo systemctl stop hostapd dnsmasq
   ```
 
 5. Configure OpenVPN (for Private VPN)
